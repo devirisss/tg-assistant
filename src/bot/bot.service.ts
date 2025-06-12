@@ -16,7 +16,7 @@ export class BotService implements OnModuleInit {
 
       const response = await this.groqService.askGroq(userMessage);
       await ctx.reply(response || 'Что-то пошло не так...', {
-        parse_mode: 'HTML',
+        parse_mode: 'Markdown',
       });
     });
 
