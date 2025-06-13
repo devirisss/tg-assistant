@@ -8,20 +8,15 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
     ConfigModule.forRoot({ isGlobal: true }),
     BullModule.forRootAsync({
       imports: [ConfigModule],
-      useFactory: (configService: ConfigService) => {
-        const redisUrl = new URL(configService.get<string>('REDIS_URL'));
-
-        return {
-          redis: {
-            host: redisUrl.hostname,
-            port: Number(redisUrl.port),
-            password: redisUrl.password || undefined,
-          },
-        };
-      },
+      useFactory: (configService: ConfigService) => ({
+        redis: {
+          host: configService.get<string>('REDIS_HOST'),
+          port: configService.get<number>('REDIS_PORT'),
+        },
+      }),
       inject: [ConfigService],
     }),
-    BotModule,
+    BotModule
   ],
 })
 export class AppModule {}
