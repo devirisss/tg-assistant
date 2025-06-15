@@ -22,18 +22,20 @@ export class BotProcessor {
     @Process({ concurrency: 5 })
     async handleReply(job: Job<{ message: string; chatId: number }>) {
         const { message, chatId } = job.data;
-        try {
-            const response = await this.gigachatService.askGigachat(message);
-            await this.bot.telegram.sendMessage(chatId, response || 'Что-то пошло не так...', {
-                parse_mode: 'Markdown',
-            });
-        } catch (error) {
-            throw error;
+        const response = await this.gigachatService.askGigachat(message);
+        if (!response) {
+            throw new Error;
         }
+        await this.bot.telegram.sendMessage(chatId, response, {
+            parse_mode: 'Markdown',
+        });
     }
 
     @OnQueueFailed()
     async onFailed(job: Job, error: Error) {
-        console.error(`Job ${job.id} failed:`, error);
+        if (job.attemptsMade === job.opts.attempts) {
+            await this.bot.telegram.sendMessage(job.data.chatId, 'Что-то пошло не так...');
+            console.error(error);
+        }
     }
 }
