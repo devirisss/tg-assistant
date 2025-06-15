@@ -29,7 +29,7 @@
     "@nestjs/platform-express": "^10.0.0",
     "bull": "^4.16.5",
     "dotenv": "^16.5.0",
-    "groq-sdk": "^0.25.0",
+    "gigachat": "^0.0.14",
     "ioredis": "^5.6.1",
     "node-telegram-bot-api": "^0.66.0",
     "reflect-metadata": "^0.2.0",

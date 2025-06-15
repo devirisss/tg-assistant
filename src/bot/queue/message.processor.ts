@@ -1,7 +1,7 @@
 import { Process, Processor, OnQueueFailed } from '@nestjs/bull';
 import { Job } from 'bull';
 import { Telegraf } from 'telegraf';
-import { GroqService } from '../../groq/groq.service';
+import { GigaChatService } from '../../gigachat/gigachat.service';
 import { ConfigService } from '@nestjs/config';
 
 export const QueueName = 'message-reply';
@@ -11,7 +11,7 @@ export class BotProcessor {
     private bot: Telegraf;
 
     constructor(
-        private readonly groqService: GroqService,
+        private readonly gigachatService: GigaChatService,
         private readonly configService: ConfigService,
     ) {
         this.bot = new Telegraf(this.configService.get<string>(
@@ -23,7 +23,7 @@ export class BotProcessor {
     async handleReply(job: Job<{ message: string; chatId: number }>) {
         const { message, chatId } = job.data;
         try {
-            const response = await this.groqService.askGroq(message);
+            const response = await this.gigachatService.askGigachat(message);
             await this.bot.telegram.sendMessage(chatId, response || 'Что-то пошло не так...', {
                 parse_mode: 'Markdown',
             });
