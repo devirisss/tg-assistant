@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { BotModule } from './bot/bot.module';
 import { BullModule } from '@nestjs/bull';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { GroqModule } from './groq/groq.module';
 
 @Module({
   imports: [
@@ -13,10 +14,12 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
           host: configService.get<string>('REDIS_HOST'),
           port: configService.get<number>('REDIS_PORT'),
         },
+
       }),
       inject: [ConfigService],
     }),
-    BotModule
+    BotModule,
+    GroqModule,
   ],
 })
 export class AppModule {}
