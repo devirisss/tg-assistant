@@ -21,4 +21,4 @@ RUN ls -la /app/dist
 
 EXPOSE 3000
 
-CMD ["pnpm", "run", "start:prod"]
+CMD ["pnpm", "run", "deploy"]

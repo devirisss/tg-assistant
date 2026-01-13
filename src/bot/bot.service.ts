@@ -18,63 +18,127 @@ export class BotService implements OnModuleInit {
   async onModuleInit() {
     this.bot = new Telegraf(process.env.BOT_TOKEN);
 
+    await this.bot.telegram.setMyCommands([
+      { command: 'start', description: 'Начать работу с ботом' },
+    ]);
+
     this.queue.on('completed', async (job, result) => {
-      await this.sendMessageToChat(result, job.data.chatId, job.data.messages);
+      try {
+        if (job.data.thinkingMessageId) {
+          try {
+            await this.bot.telegram.deleteMessage(job.data.chatId, job.data.thinkingMessageId);
+          } catch (error) {
+            console.error('Error deleting thinking message:', error);
+          }
+        }
+        await this.sendMessageToChat(result, job.data.chatId, job.data.messages);
+      } catch (error) {
+        console.error('Error in completed handler:', error);
+        await this.sendServiceError(job.data.chatId);
+      }
     });
 
     this.queue.on('failed', async (job, error) => {
       if (!job) return;
-      const { chatId, messages, model } = job.data;
+      const { chatId, messages, model, thinkingMessageId } = job.data;
+
+      if (thinkingMessageId) {
+        try {
+          await this.bot.telegram.deleteMessage(chatId, thinkingMessageId);
+        } catch (err) {
+          console.error('Error deleting thinking message on failure:', err);
+        }
+      }
 
       if (job.attemptsMade === job.opts.attempts) {
-        if (model === 'groq') {
-          await this.sendMessageToChat(
-            'Groq временно недоступен. Переключаюсь на GigaChat…',
-            chatId,
-          );
-
-          await this.queue.add(
-            {
-              messages,
+        try {
+          if (model === 'groq') {
+            await this.sendMessageToChat(
+              'Groq временно недоступен. Переключаюсь на GigaChat…',
               chatId,
-              model: 'gigachat',
-            },
-            {
-              attempts: 3,
-              backoff: 3000,
-              removeOnComplete: true,
-              removeOnFail: true,
-            }
-          );
+            );
 
-          return;
+            await this.queue.add(
+              {
+                messages,
+                chatId,
+                model: 'gigachat',
+              },
+              {
+                attempts: 3,
+                backoff: 3 * 1000,
+                removeOnComplete: true,
+                removeOnFail: true,
+              }
+            );
+
+            return;
+          }
+
+          await this.sendServiceError(chatId);
+        } catch (err) {
+          console.error('Error handling failed job:', err);
+          await this.sendServiceError(chatId);
         }
-
-        await this.sendMessageToChat(`Все модели сейчас недоступны: ${error.message}`, job.data.chatId);
       }
     });
 
-    this.bot.on('text', async (ctx) => {
-      const userMessage = ctx.message.text || '';
+    this.bot.command('start', async (ctx) => {
       const chatId = ctx.chat.id;
+      await this.sendWelcomeMessage(chatId);
+    });
 
-      const messages = await this.prepareMessages(userMessage, chatId);
+    this.bot.on('text', async (ctx) => {
+      try {
+        const userMessage = ctx.message.text || '';
+        const chatId = ctx.chat.id;
 
-      await ctx.reply('Думаю...');
-
-      await this.queue.add(
-        { messages, chatId, model: 'groq' },
-        {
-          timeout: 60 * 1000,
-          attempts: 3,
-          backoff: 3 * 1000,
-          removeOnFail: true,
-          removeOnComplete: true,
+        const isNewUser = await this.isNewUser(chatId);
+        if (isNewUser) {
+          await this.sendWelcomeMessage(chatId);
         }
-      );
+
+        const messages = await this.prepareMessages(userMessage, chatId);
+
+        const thinkingMessage = await ctx.reply('Думаю...');
+
+        await this.queue.add(
+          { messages, chatId, model: 'groq', thinkingMessageId: thinkingMessage.message_id },
+          {
+            timeout: 60 * 1000,
+            attempts: 3,
+            backoff: 3 * 1000,
+            removeOnFail: true,
+            removeOnComplete: true,
+          }
+        );
+      } catch (error) {
+        console.error('Error processing text message:', error);
+        try {
+          await this.sendServiceError(ctx.chat.id);
+        } catch (err) {
+          console.error('Error sending service error message:', err);
+        }
+      }
     });
 
     await this.bot.launch();
+  }
+
+  async isNewUser(chatId: number): Promise<boolean> {
+    const messageCount = await this.prisma.message.count({
+      where: { chatId },
+    });
+    return messageCount === 0;
+  }
+
+  async sendWelcomeMessage(chatId: number) {
+    const welcomeText = 'Привет! Я телеграм бот, который может ответить на любой вопрос. Просто напиши мне что-нибудь, и я постараюсь помочь!';
+    try {
+      await this.bot.telegram.sendMessage(chatId, welcomeText);
+    } catch (error) {
+      console.error('Error sending welcome message:', error);
+    }
   }
 
   async prepareMessages(userMessage: string, chatId: number) {
@@ -110,7 +174,16 @@ export class BotService implements OnModuleInit {
         await this.saveMessages(message, chatId, history);
       }
     } catch (error) {
-      await this.bot.telegram.sendMessage(chatId, `Что-то пошло не так: ${error.message}`);
+      console.error('Error in sendMessageToChat:', error);
+      await this.sendServiceError(chatId);
+    }
+  }
+
+  async sendServiceError(chatId: number) {
+    try {
+      await this.bot.telegram.sendMessage(chatId, 'Ошибка сервиса');
+    } catch (error) {
+      console.error('Error sending service error message:', error);
     }
   }
 
